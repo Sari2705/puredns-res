@@ -40,11 +40,6 @@ jobs:
   process_assigned_chunks:
     name: Process Chunk (${{ matrix.pair.chunk }})
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/pcoder7/spider-puredns-actions:latest
-      credentials:
-        username: ${{ secrets.GHCR_USER }}
-        password: ${{ secrets.GHCR_TOKEN }}
     strategy:
       fail-fast: false
       max-parallel: 20
@@ -62,6 +57,23 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
+        with: 
+            fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.23'            # or whichever version you need
+
+      - name: Cache Go modules and build cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-mod-
 
       - name: Download Chunks Package from Primary Workflow
         env:
@@ -90,6 +102,47 @@ jobs:
           fi
           echo "Artifact downloaded successfully."
           ls -l
+
+      - name: Ensure Tools are installed
+        shell: bash
+        run: |
+          if ! command -v dsieve &> /dev/null; then
+            echo "🛠️  dsieve not found; installing..."
+            GO111MODULE=on go install \
+             github.com/trickest/dsieve@latest
+            echo "✅ Installed dsieve to $(go env GOPATH)/bin/dsieve"
+          else
+            echo "✅ dsieve already installed at $(command -v dsieve)"
+          fi
+         
+          # Installing cut-cdn
+          if ! command -v cut-cdn >/dev/null; then
+            echo "Installing cut-cdn…"
+            go install github.com/ImAyrix/cut-cdn@latest
+          else
+            echo "cut-cdn already in cache"
+          fi       
+          
+          # Installing smap
+          if ! command -v smap >/dev/null; then
+            echo "Installing smap…"
+            go install -v github.com/s0md3v/smap/cmd/smap@latest
+          else
+            echo "smap already in cache"
+          fi   
+          # Installing anew
+          if ! command -v anew >/dev/null; then
+            echo "Installing anew…"
+            go install -v github.com/tomnomnom/anew@latest
+          else
+            echo "anew already in cache"
+          fi    
+      
+      - name: Install pre‑reqs
+        run: | 
+          sudo apt-get update && sudo apt-get install -y jq curl
+
+          
       - name: Install sanicdns
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
