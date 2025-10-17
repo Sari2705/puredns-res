@@ -191,7 +191,7 @@ jobs:
         run: |
           # This entire block is a direct copy of the processing logic from the Primary workflow
           # to ensure 100% consistency in results.
-          set -e
+          
           CHUNK_FILE="${{ matrix.pair.chunk }}"
           JOB_OUTPUT_DIR="job_output"
           mkdir -p "$JOB_OUTPUT_DIR"
