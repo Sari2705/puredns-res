@@ -349,7 +349,7 @@ jobs:
         with:
           pattern: "job-results-tertiary-*"
           path: temp-aggregated-results
-          merge-multiple: true
+
 
       - name: De-duplicate and Verify Results
         id: deduplicate
