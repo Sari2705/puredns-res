@@ -371,17 +371,61 @@ jobs:
           # Create final results directory
           mkdir -p "$FINAL_RESULTS_DIR"
           
-          # Move/merge the downloaded artifacts to final-results
-          # Artifacts are already organized by domain due to upload structure
-          cp -r "$TEMP_DIR"/* "$FINAL_RESULTS_DIR"/
+          echo "Merging and de-duplicating results from all artifacts..."
           
-          # De-duplicate all merged result files
+          # Find all domain directories across all downloaded artifacts
+          find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | while read -r domain_dir; do
+            domain_name=$(basename "$domain_dir")
+            dest_dir="$FINAL_RESULTS_DIR/$domain_name"
+            mkdir -p "$dest_dir"
+            
+            echo "Processing domain: $domain_name"
+            
+            # Merge resolved_subdomains.txt from all artifacts for this domain
+            if [ -f "$domain_dir/resolved_subdomains.txt" ]; then
+              cat "$domain_dir/resolved_subdomains.txt" >> "$dest_dir/resolved_subdomains.txt.tmp"
+            fi
+            
+            # Merge subdomains_ports.txt from all artifacts for this domain
+            if [ -f "$domain_dir/subdomains_ports.txt" ]; then
+              cat "$domain_dir/subdomains_ports.txt" >> "$dest_dir/subdomains_ports.txt.tmp"
+            fi
+          done
+          
+          # De-duplicate and sort all merged files
           echo "De-duplicating all merged result files..."
-          find "$FINAL_RESULTS_DIR" -type f -name "*.txt" -exec sort -u -o {} {} \;
+          find "$FINAL_RESULTS_DIR" -type f -name "*.tmp" | while read -r tmp_file; do
+            final_file="${tmp_file%.tmp}"
+            sort -u "$tmp_file" > "$final_file"
+            rm "$tmp_file"
+            echo "  - Merged $(wc -l < "$final_file") unique entries into $(basename "$final_file") for $(basename $(dirname "$final_file"))"
+          done
+          
+          # Remove empty directories
+          find "$FINAL_RESULTS_DIR" -type d -empty -delete
+          
+          # Final verification
+          if [ -z "$(ls -A "$FINAL_RESULTS_DIR" 2>/dev/null)" ]; then
+            echo "::warning::No results after merging and de-duplication."
+            echo "has_results=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           
           echo "has_results=true" >> "$GITHUB_OUTPUT"
           echo "Final results structure:"
           ls -R "$FINAL_RESULTS_DIR"
+          
+          # Summary
+          echo ""
+          echo "=== Merge Summary ==="
+          for domain_dir in "$FINAL_RESULTS_DIR"/*; do
+            if [ -d "$domain_dir" ]; then
+              domain=$(basename "$domain_dir")
+              resolved_count=$(wc -l < "$domain_dir/resolved_subdomains.txt" 2>/dev/null || echo "0")
+              ports_count=$(wc -l < "$domain_dir/subdomains_ports.txt" 2>/dev/null || echo "0")
+              echo "  $domain: $resolved_count resolved subdomains, $ports_count with ports"
+            fi
+          done
 
       - name: Upload Final Consolidated Results
         if: steps.deduplicate.outputs.has_results == 'true'
